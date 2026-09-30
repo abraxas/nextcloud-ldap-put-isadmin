@@ -19,7 +19,7 @@ mail: ldapadmin@lab.invalid
 userPassword: LabLdapAdmin35!
 uidNumber: 10001
 gidNumber: 10000
-homeDirectory: /home/ldapadmin
+homeDirectory: /var/empty/ldapadmin
 loginShell: /bin/bash
 
 dn: uid=ldapuser,ou=users,dc=lab,dc=invalid
@@ -34,7 +34,7 @@ mail: ldapuser@lab.invalid
 userPassword: LabLdapUser35!
 uidNumber: 10002
 gidNumber: 10001
-homeDirectory: /home/ldapuser
+homeDirectory: /var/empty/ldapuser
 loginShell: /bin/bash
 
 dn: cn=ncadmins,ou=groups,dc=lab,dc=invalid
