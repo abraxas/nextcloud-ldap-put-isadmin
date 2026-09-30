@@ -16,18 +16,17 @@
 
 **Nextcloud Server** `35.0.0` - Nextcloud GmbH
 
-Unpublished Nextcloud source finding: PUT `/cloud/users/{id}` lets a delegated Users admin edit a target unless that target is in the **local** group `admin`. PATCH on the same path correctly uses `isAdmin()`. LDAP-promoted admins are `isAdmin()===true` and often **not** in that local group.
+PUT `/cloud/users/{id}` lets a delegated Users admin edit a target unless that target is in the **local** group `admin`. PATCH on the same path correctly uses `isAdmin()`. LDAP-promoted admins are `isAdmin()===true` and often **not** in that local group.
 
 **A bad actor with the helpdesk-style Users job can disable, quota-lock, or delete a real LDAP-promoted instance admin. The newer PATCH API correctly refuses. The older PUT path does not.**
 
 | | |
 |---|---|
-| ID | Unpublished Nextcloud source finding #3 (no CVE yet) |
+| ID | no CVE yet |
 | CWE | [CWE-863](https://cwe.mitre.org/data/definitions/863.html) |
 | CVSS | **High: 7.2** `CVSS:3.1/AV:N/AC:L/PR:H/UI:N/S:U/C:H/I:H/A:H` (delegated Users admin, not instance admin) |
 | Product | [Nextcloud Server](https://github.com/nextcloud/server) |
 | Affected | **35.0.0** (`da02f41`) official `nextcloud:35.0.0-apache` plus `user_ldap` |
-| Patched | vendor patch - see references |
 | Auth | delegated Users admin vs LDAP-promoted admin |
 | License | [GNU Affero GPL v3.0](LICENSE) |
 | Lab | `127.0.0.1` only |
@@ -50,13 +49,19 @@ They cannot do this to someone who is actually in the local `admin` group. They 
 
 ---
 
-## Advisory (from the source map)
+## How I found it
 
-`UsersController::editUser` PUT ~1273-1277 `isInGroup($target, 'admin')`. `editUserMultiField` PATCH ~952-954 `isAdmin($target)`. `Manager::isAdmin()` asks LDAP `IIsAdmin` then local group. Disable/enable/delete/wipe use the PUT-style group check.
+Provisioning has two editors for the same user. `UsersController::editUser` is PUT. `editUserMultiField` is PATCH. Same file. Adjacent methods. Two different answers to "is this person an admin."
+
+PUT checks `isInGroup($target, 'admin')`. PATCH checks `isAdmin($target)`. `Manager::isAdmin()` asks LDAP `IIsAdmin` then the local group. `occ ldap:promote-group` makes an LDAP group instance-admin without putting those uids in the local `admin` group.
+
+I stood up official `nextcloud:35.0.0-apache` plus `osixia/openldap:1.5.0`. LDAP user `ldapadmin` in promoted group `ncadmins`: `isAdmin()===true`, not in local `admin`. Local `helpdesk` is delegated Users, not instance admin.
+
+I sent PATCH first. It is the newer route. I expected PUT to match it. PATCH `{"quota":"1 GB"}` returned **403**. PUT `key=quota&value=1 GB` returned **200**. GET then showed quota `1073741824`.
 
 ---
 
-## Reproduction (authorized lab)
+## Lab
 
 ```bash
 cd lab
@@ -65,15 +70,9 @@ cd lab
 
 Target **only** `http://127.0.0.1:18342` (OpenLDAP on compose DNS `ldap:389`).
 
-Success last line:
-
 ```text
 SUCCESS NEXTCLOUD-LDAP-PUT-ISADMIN who=delegated-users-admin target=ldapadmin put=200 patch=403 NEXTCLOUD-LDAP-PUT-ISADMIN-WITNESS
 ```
-
----
-
-## Lab images
 
 - [`lab/docker-compose.yml`](lab/docker-compose.yml)
 - [`lab/Dockerfile`](lab/Dockerfile)
@@ -81,7 +80,11 @@ SUCCESS NEXTCLOUD-LDAP-PUT-ISADMIN who=delegated-users-admin target=ldapadmin pu
 - [`lab/ldap/50-seed.ldif`](lab/ldap/50-seed.ldif)
 - [`lab/fixture.php`](lab/fixture.php)
 
-Publish nothing except `127.0.0.1`.
+---
+
+## The fix
+
+Use `isAdmin($target)` on PUT/disable/delete/wipe the same way PATCH already does.
 
 ---
 
@@ -89,7 +92,6 @@ Publish nothing except `127.0.0.1`.
 
 - [github.com/nextcloud/server](https://github.com/nextcloud/server) tag [v35.0.0](https://github.com/nextcloud/server/releases/tag/v35.0.0)
 - LDAP promote: `occ ldap:promote-group` (PR `#41650`)
-- Vendor intake: [hackerone.com/nextcloud](https://hackerone.com/nextcloud). Do **not** open a public GitHub issue.
 - Abraxas Labs: [abraxaslabs.tech](https://abraxaslabs.tech) · [github.com/abraxas](https://github.com/abraxas) · [@abraxas_null](https://x.com/abraxas_null)
 
 ---
